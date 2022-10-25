@@ -48,3 +48,6 @@ lex.yy.c: tiger.lex
 
 util.o: util.c util.h
 	cc -g -c util.c
+
+clean: 
+	rm -f a.out *.o y.tab.c y.tab.h lex.yy.c
