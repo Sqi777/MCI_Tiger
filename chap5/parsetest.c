@@ -19,10 +19,8 @@ void parse(string fname)
 
 int main(int argc, char **argv) {
     if (argc!=2) {fprintf(stderr,"usage: a.out filename\n"); exit(1);}
-    printf("start to AST! \n");
     A_exp ast;
     ast = parse(argv[1]);
-    printf("AST has been done!\n");
     SEM_transProg(ast);
 
  return 0;

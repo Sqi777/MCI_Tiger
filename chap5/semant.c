@@ -48,9 +48,7 @@ void SEM_transProg(A_exp exp){
     S_table tenv = E_base_tenv();
 	S_table venv = E_base_venv(); 
     loop = 0;
-    printf("D entry trans\n");
-	struct expty t = transExp(venv, tenv, exp);
-    printf("D entry trans end\n");
+	transExp(venv, tenv, exp);
 }
 
 struct expty transVar(S_table venv, S_table tenv, A_var v){
@@ -98,30 +96,22 @@ struct expty transVar(S_table venv, S_table tenv, A_var v){
 struct expty transExp(S_table venv, S_table tenv, A_exp a){
     switch (a->kind){
         case A_letExp:{
-            printf("D entry LET\n");
             struct expty exp;
             A_decList d;
             S_beginScope(venv);
             S_beginScope(tenv);
-            printf("D entry LET2\n");
             for(d = a->u.let.decs; d; d = d->tail){
-                printf("D dec\n");
                 transDec(venv, tenv, d->head);
             }    
-            printf("D entry LET dec end\n"); 
             exp = transExp(venv, tenv, a->u.let.body);    
-            printf("D  wrong here end\n"); 
             S_endScope(tenv);
-            S_endScope(venv);
-            printf("D entry LET end\n");    
+            S_endScope(venv);  
             return exp;
         }
         case A_varExp:{
-            printf("D entry varExp\n");
             struct expty exp;
             A_var var = a->u.var;
             exp = transVar(venv, tenv, var);
-            printf("D entry seqExp end\n");
             return exp;
         }
         case A_assignExp:{
@@ -141,22 +131,17 @@ struct expty transExp(S_table venv, S_table tenv, A_exp a){
             return expTy(NULL, Ty_Nil());
         }
         case A_seqExp:{
-            printf("D entry seqExp\n");
             if (a->u.seq == NULL)
 				return expTy(NULL, Ty_Void());
             A_expList a_el = a->u.seq;
             for(; a_el; a_el = a_el->tail){
-                printf("D entry explist\n");
                 if(!a_el->tail)
                     return transExp(venv, tenv, a_el->head);
                 transExp(venv, tenv, a_el->head);    
             }
-            printf("D entry explist end\n");
-            /*return transExp(venv, tenv, a_el->head); //  why return this???  */
-
         }
         case A_callExp:{
-            E_enventry env = S_look(tenv, a->u.call.func);
+            E_enventry env = S_look(venv, a->u.call.func);
             // check if the function is declared
             if(!env){
                 EM_error(a->pos, "undeclared function '%s",S_name(a->u.call.func));
@@ -263,7 +248,6 @@ struct expty transExp(S_table venv, S_table tenv, A_exp a){
 			if (b.ty->kind != Ty_void)
 				EM_error(a->pos, "body exp shouldn't return a value");
 			return expTy(NULL, Ty_Void());
-            // is there something wrong when you check out a linker ?
         }
         case A_breakExp: {
 			if (!loop)
@@ -283,7 +267,7 @@ struct expty transExp(S_table venv, S_table tenv, A_exp a){
 			struct expty i = transExp(venv, tenv, a->u.array.init);	
 			if (z.ty->kind != Ty_int)
 				EM_error(a->pos, "array size was not an integer value");
-			if (!cmp_ty(i.ty, t->u.array)) // like something wrong here
+			if (!cmp_ty(i.ty, t->u.array)) 
 				EM_error(a->pos, "array init type mismatch");
 			return expTy(NULL, t);
 		}
@@ -322,18 +306,15 @@ struct expty transExp(S_table venv, S_table tenv, A_exp a){
 void transDec(S_table venv, S_table tenv, A_dec d){
     switch(d->kind) {
         case A_varDec:{
-            printf("D entry vardec\n");
             struct expty e = transExp(venv, tenv, d->u.var.init);
-            printf("D entry vardec1\n");
             if(d->u.var.typ){
-                Ty_ty t = S_look(tenv, d->u.var.typ); //kind of return different from S_look(venv,key)
+                Ty_ty t = S_look(tenv, d->u.var.typ);  
                 if (!t)
 					EM_error(d->pos, "undefined type '%s'", S_name(d->u.var.typ));
 				else {
 					if (!cmp_ty(t, e.ty)) 
 						EM_error(d->pos, "var init type mismatch");
 					S_enter(venv, d->u.var.var, E_VarEntry(t));
-                    printf("D entry vardec end1\n");
 					break;
 				}
             }
@@ -342,16 +323,13 @@ void transDec(S_table venv, S_table tenv, A_dec d){
 			else if (e.ty == Ty_Nil())
 				EM_error(d->pos, "'%s' is not a record", S_name(d->u.var.var));
             S_enter(venv, d->u.var.var, E_VarEntry(e.ty));
-            printf("D entry vardec end\n");
             break;
         }
         case A_typeDec:{
-            printf("D entry typedec\n");
             //only one dec in declist
             // S_enter(tenv, d->u.type->head->name, transTy(tenv, d->u.type->head->ty));
             A_nametyList a_nl;
             set s = setInit();
-            printf("D type 1\n");
             // put head into tenv
             for(a_nl = d->u.type; a_nl; a_nl = a_nl->tail){
                 if (!setPut(s, a_nl->head->name)) {
@@ -362,7 +340,6 @@ void transDec(S_table venv, S_table tenv, A_dec d){
 				S_enter(tenv, a_nl->head->name, t);
 			}
             setRset(s);
-            printf("D type 2\n");
             for(a_nl = d->u.type; a_nl; a_nl = a_nl->tail){
                 if(!setPut(s, a_nl->head->name))
                     continue;
@@ -370,7 +347,6 @@ void transDec(S_table venv, S_table tenv, A_dec d){
 				t->u.name.ty = transTy(tenv, a_nl->head->ty);
             }
             //check recursive definition
-            printf("D type 3\n");
             for(a_nl = d->u.type; a_nl; a_nl = a_nl->tail){
                 setRset(s);
                 Ty_ty ty = S_look(tenv, a_nl->head->name);
@@ -383,11 +359,11 @@ void transDec(S_table venv, S_table tenv, A_dec d){
 						break;
 					}
                     t = S_look(tenv, t->u.name.sym);
-                    t = t->u.name.ty;
+                    if(t->kind == Ty_name)
+                        t = t->u.name.ty;
                 }
                 ty->u.name.ty = t;
             }
-            printf("D type end\n");
             setFree(s);
             break;
         }
@@ -446,7 +422,7 @@ Ty_ty transTy(S_table tenv, A_ty a) {
 				EM_error(a->pos, "undefined type '%s'", S_name(a->u.name));
 				return Ty_Int();
 			} else
-				return Ty_Name(a->u.name, t->u.name.ty);
+				return Ty_Name(a->u.name, t);
 		}
 		case A_recordTy:
 			return Ty_Record(transFieldList(tenv, a->u.record));
