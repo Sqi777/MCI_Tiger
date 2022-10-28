@@ -361,6 +361,7 @@ void transDec(Tr_level level, S_table venv, S_table tenv, A_dec d){
 						t->u.name.ty = Ty_Int();
                         break;
                     }
+                    t = S_look(tenv, t->u.name.sym);
                     if(t->kind == Ty_name)
                         t = t->u.name.ty;
                 }
