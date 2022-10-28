@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include "translate.h"
 #include "frame.h"
+#include "translate.h"
 
 struct Tr_level_{
     Tr_level parent;

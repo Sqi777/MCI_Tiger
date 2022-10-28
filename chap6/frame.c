@@ -31,7 +31,7 @@ F_access InFrame(int offset){
 }
 // 只是简单的记录了一下，该变量或者参数会分配到抽象机的寄存器中，抽象机有无限多寄存器
 // 或者更直接的理解就是该变量或者参数会分配到寄存器中，至于Temp_temp的编号有什么用，现在还不清楚
-F_access F_InReg(Temp_temp reg){
+F_access InReg(Temp_temp reg){
     F_access p = checked_malloc(sizeof(*p));
     p->kind = inReg;
     p->u.reg = reg;
@@ -80,10 +80,11 @@ F_frame F_newFrame(Temp_label name, U_boolList formals) {
 }
 
 F_access F_allocLocal(F_frame f, bool escape) {
-	f->local_count++;
-	if (escape) 
+	//f->local_count++;
+	if (escape){
+		f->local_count++;	
 		return InFrame(-F_WORD_SIZE * (f->local_count)); // why minus?
-	else 
+	}else 
 		return InReg(Temp_newtemp());
 }
 

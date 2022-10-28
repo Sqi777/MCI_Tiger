@@ -9,8 +9,9 @@
 #include "translate.h"
 #include "semant.h"
 
+
 typedef void *Tr_exp;
-struct expty {Tr_exp exp; Ty_ty ty};
+struct expty {Tr_exp exp; Ty_ty ty;};
 
 struct expty expTy(Tr_exp exp, Ty_ty ty){
     struct expty e;
@@ -45,7 +46,15 @@ static void setRset(set s);
 static void setFree(set s);
 
 //nested layers of loop
-static int loop = 0;
+static int loop;
+
+void SEM_transProg(A_exp exp){
+    S_table tenv = E_base_tenv();
+	S_table venv = E_base_venv(); 
+    Tr_level level = Tr_outermost();
+    loop = 0;
+	transExp(level, venv, tenv, exp);
+}
 
 struct expty transVar(Tr_level level, S_table venv, S_table tenv, A_var v){
     switch (v->kind){
@@ -102,6 +111,23 @@ struct expty transExp(Tr_level level, S_table venv, S_table tenv, A_exp a){
         }
         case A_nilExp:{
             return expTy(NULL, Ty_Nil());
+        }
+        case A_assignExp:{
+            struct expty var = transVar(level, venv, tenv, a->u.assign.var);
+            struct expty exp = transExp(level, venv, tenv, a->u.assign.exp);
+            if (!cmp_ty(var.ty, exp.ty))
+				EM_error(a->pos, "assignment type mismatch");
+			return expTy(NULL, Ty_Void());
+        }
+        case A_seqExp:{
+            if (a->u.seq == NULL)
+				return expTy(NULL, Ty_Void());
+            A_expList a_el = a->u.seq;
+            for(; a_el; a_el = a_el->tail){
+                if(!a_el->tail)
+                    return transExp(level, venv, tenv, a_el->head);
+                transExp(level, venv, tenv, a_el->head);    
+            }
         }
         case A_ifExp: {
 			struct expty t = transExp(level, venv, tenv, a->u.iff.test);	
@@ -169,7 +195,7 @@ struct expty transExp(Tr_level level, S_table venv, S_table tenv, A_exp a){
 			} 
 		}
         case A_callExp:{
-            E_enventry env = S_look(tenv, a->u.call.func);
+            E_enventry env = S_look(venv, a->u.call.func);
             // check if the function is declared
             if(!env){
                 EM_error(a->pos, "undeclared function '%s",S_name(a->u.call.func));
@@ -207,7 +233,7 @@ struct expty transExp(Tr_level level, S_table venv, S_table tenv, A_exp a){
 			struct expty i = transExp(level, venv, tenv, a->u.array.init);	
 			if (z.ty->kind != Ty_int)
 				EM_error(a->pos, "array size was not an integer value");
-			if (!cmp_ty(i.ty, t->u.array)) // like something wrong here
+			if (!cmp_ty(i.ty, t->u.array)) 
 				EM_error(a->pos, "array init type mismatch");
 			return expTy(NULL, t);
 		}
@@ -309,7 +335,7 @@ void transDec(Tr_level level, S_table venv, S_table tenv, A_dec d){
             A_nametyList a_nl;
             // put head into tenv
             for(a_nl = d->u.type; a_nl; a_nl = a_nl->tail){
-                if (!set_push(set, a_nl->head->name)) {
+                if (!setPut(set, a_nl->head->name)) {
 					EM_error(d->pos, "redefinition of '%s'", S_name(a_nl->head->name));
 					continue;
 				}
@@ -335,8 +361,8 @@ void transDec(Tr_level level, S_table venv, S_table tenv, A_dec d){
 						t->u.name.ty = Ty_Int();
                         break;
                     }
-                    t = S_look(tenv, t->u.name.sym);
-                    t = t->u.name.ty;
+                    if(t->kind == Ty_name)
+                        t = t->u.name.ty;
                 }
                 ty->u.name.ty = t;
             }
@@ -347,7 +373,7 @@ void transDec(Tr_level level, S_table venv, S_table tenv, A_dec d){
             set set = setInit();
             A_fundecList a_fdl;
             for(a_fdl = d->u.function; a_fdl; a_fdl = a_fdl->tail){
-                if (!set_push(set, a_fdl->head->name)) {
+                if (!setPut(set, a_fdl->head->name)) {
 					EM_error(d->pos, "redefinition of '%s'", S_name(a_fdl->head->name));
 					continue;
 				}
@@ -378,7 +404,7 @@ void transDec(Tr_level level, S_table venv, S_table tenv, A_dec d){
                  Ty_tyList t = f->u.fun.formals; 
                  Tr_accessList acl = Tr_formals(level_new); 
                  acl = acl->tail; //the first is static link
-                 for(l = a_fdl->head->params, t, acl; l; l = l->tail,t = t->tail,acl = acl->tail){
+                 for(l = a_fdl->head->params; l; l = l->tail,t = t->tail,acl = acl->tail){
                     S_enter(venv, l->head->name, E_VarEntry(acl->head, t->head));
                  }
                 } 
@@ -403,7 +429,7 @@ Ty_ty transTy(S_table tenv, A_ty a){
 				EM_error(a->pos, "undefined type '%s'", S_name(a->u.name));
 				return Ty_Int();
 			} else
-				return Ty_Name(a->u.name, t->u.name.ty);
+				return Ty_Name(a->u.name, t);
 		}
 		case A_recordTy:
 			return Ty_Record(transFieldList(tenv, a->u.record));
@@ -418,6 +444,32 @@ Ty_ty transTy(S_table tenv, A_ty a){
 	}
 	assert(0);
 }
+
+//skip Ty_name
+Ty_ty actual_ty(Ty_ty t){
+	if (!t)
+		return NULL;
+
+	while (t && t->kind == Ty_name)
+		t = t->u.name.ty;
+	return t;
+}
+
+//same type use same Ty_ty
+bool cmp_ty(Ty_ty a, Ty_ty b) {
+	assert(a&&b);
+	a = actual_ty(a);
+	b = actual_ty(b);
+	if (a == b)
+		return TRUE;
+	else {
+		if (a->kind == Ty_record && b->kind == Ty_nil || a->kind == Ty_nil && b->kind == Ty_record)
+			return TRUE;
+		else 
+			return FALSE;
+	}
+}
+
  
 U_boolList makeFormalList(A_fieldList params) {
 	U_boolList head = NULL, tail = NULL;
@@ -470,7 +522,7 @@ Ty_tyList makeFormalTyList(S_table tenv, A_fieldList a_fl){
         Ty_tyList t_tl = Ty_TyList(t, NULL);
         return t_tl;
     } else {
-        Ty_tyList t_tl = Ty_TyList(t ,transFieldList(tenv, a_fl->tail));
+        Ty_tyList t_tl = Ty_TyList(t ,makeFormalTyList(tenv, a_fl->tail));
         return t_tl;
     }
 }

@@ -5,6 +5,8 @@
 #ifndef TEMP_H_
 #define TEMP_H_
 
+#include "symbol.h"
+
 typedef struct Temp_temp_ *Temp_temp;
 Temp_temp Temp_newtemp(void);
 

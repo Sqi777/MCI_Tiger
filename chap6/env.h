@@ -1,7 +1,9 @@
 #ifndef ENV_H_
 #define ENV_H_
+
 #include "types.h"
 #include "symbol.h"
+#include "translate.h"
 
 typedef struct E_enventry_ *E_enventry;
 
